@@ -1,0 +1,1 @@
+# GraphCDN plugin for WordPress
