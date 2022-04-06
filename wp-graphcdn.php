@@ -28,14 +28,11 @@ if (!defined('ABSPATH')) {
  * Register the settings
  */
 
-add_action('admin_init', 'register_graphcdn_settings');
-
-function register_graphcdn_settings()
-{
+add_action('admin_init', function () {
   register_setting('graphcdn', 'graphcdn_service_name');
   register_setting('graphcdn', 'graphcdn_purging_token');
   register_setting('graphcdn', 'graphcdn_soft_purge');
-}
+});
 
 
 
@@ -43,10 +40,7 @@ function register_graphcdn_settings()
  * Add a "Settings" page for GraphCDN (part of the "GraphQL" Menu provided by WPGraphQL)
  */
 
-add_action('admin_menu', 'add_caching_page');
-
-function add_caching_page()
-{
+add_action('admin_menu', function () {
   add_submenu_page(
     'graphiql-ide',
     __('WPGraphQL Settings', 'wp-graphql'),
@@ -55,7 +49,7 @@ function add_caching_page()
     'graphql-caching',
     'render_caching_page'
   );
-}
+});
 
 function render_caching_page()
 {
@@ -133,16 +127,12 @@ function render_caching_page()
  * Handle submitting the form to purge the entire cache (part of the settings page)
  */
 
-add_action('admin_post_graphcdn_purge_all', 'post_purge_all');
-
-function post_purge_all()
-{
+add_action('admin_post_graphcdn_purge_all', function () {
   $res = purge_all();
   $query = $res ? 'failure=' . urlencode($res) : 'success=true';
   wp_redirect('admin.php?page=graphql-caching&' . $query);
   exit;
-}
-
+});
 
 
 /**
