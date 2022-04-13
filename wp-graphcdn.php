@@ -190,7 +190,47 @@ add_action('registered_post_type', function (string $post_type, WP_Post_Type $po
   $GLOBALS['gcdn_id_prefix_map'][$post_type_object->graphql_single_name] = 'post';
 }, 10, 2);
 
+add_action('registered_taxonomy', function (string $taxonomy, $object_type, array $args) {
+  /**
+   * Noting to do if the type is not exposed over GraphQL, or if the type 
+   * names are not specified.
+   */
+  if (
+    !$args['show_in_graphql']
+    || !$args['graphql_single_name']
+    || !$args['graphql_plural_name']
+  ) return;
 
+  /** Add an array to collect purges for this custom post type.  */
+  $GLOBALS['gcdn_purges'][$args['graphql_single_name']] = [];
+
+  /** Extend the mapping from post type to GraphQL typename. */
+  $GLOBALS['gcdn_typename_map'][$taxonomy] = $args['graphql_single_name'];
+
+  /** Extend the mapping from GraphQL typename to id prefix. */
+  $GLOBALS['gcdn_id_prefix_map'][$args['graphql_single_name']] = 'term';
+
+  /**
+   * This runs when creating a new term.
+   */
+  add_action("created_{$taxonomy}", function () use ($args) {
+    $GLOBALS['gcdn_purges']['purge_all'][] = $args['graphql_single_name'];
+  });
+
+  /**
+   * This runs when updating an existing term.
+   */
+  add_action("edited_{$taxonomy}", function (int $term_id) use ($args) {
+    $GLOBALS['gcdn_purges'][$args['graphql_single_name']][] = $term_id;
+  });
+
+  /**
+   * This runs when deleting a term.
+   */
+  add_action("delete_${taxonomy}", function (int $term_id) use ($args) {
+    $GLOBALS['gcdn_purges'][$args['graphql_single_name']][] = $term_id;
+  });
+}, 10, 3);
 
 /**
  * This runs when inserting or updating any post type. This also includes 
