@@ -408,29 +408,26 @@ add_action('shutdown', function () {
    * will take care of that.
    */
 
-  $should_send_request = false;
   $variable_definitions = '$soft: Boolean';
   $selection_set = '';
   $variable_values = [];
   foreach ($GLOBALS['gcdn_purges'] as $key => $value) {
     if ($key === 'purge_all') {
       /** Handle types where all entities should by purged. */
-      $selection_set .= "purge{$key}(soft: \$soft)\n";
-
-      $should_send_request = true;
-    } else {
+      foreach ($value as $type) {
+        $selection_set .= "purge{$type}(soft: \$soft)\n";
+      }
+    } else if (count($value) > 0) {
       /** Handle purging individual entities by their id. */
       $variable_name = "\${$key}Ids";
       $variable_definitions .= " {$variable_name}: [ID!]";
       $selection_set .= "purge{$key}ById: purge{$key}(soft: \$soft, id: {$variable_name})\n";
       $variable_values[$variable_name] = encode_ids($value, $GLOBALS['gcdn_id_prefix_map'][$key]);
-
-      $should_send_request = count($value) > 0;
     }
   }
 
   /** Skip sending any request if there is nothing to purge. */
-  if (!$should_send_request) return;
+  if ($selection_set === '') return;
 
   $query = "mutation WPGraphCDNIntegration(\$soft: Boolean {$variable_definitions}) {
     {$selection_set}
