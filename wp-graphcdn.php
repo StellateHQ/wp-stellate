@@ -140,7 +140,7 @@ add_action('admin_post_graphcdn_purge_all', function () {
  * This global array stores all the stuff that we want to purge.
  */
 
-$GLOBALS["gcdn_purges"] = [
+$GLOBALS['gcdn_purges'] = [
   'purge_all' => [],
   'Post' => [],
   'Page' => [],
@@ -152,28 +152,92 @@ $GLOBALS["gcdn_purges"] = [
   'User' => []
 ];
 
+$GLOBALS['gcdn_typename_map'] = [
+  'post' => 'Post',
+  'page' => 'Page',
+  'nav_menu_item' => 'MenuItem'
+];
 
+$GLOBALS['gcdn_id_prefix_map'] = [
+  'Post' => 'post',
+  'Page' => 'post',
+  'Category' => 'term',
+  'Tag' => 'term',
+  'Comment' => 'comment',
+  'Menu' => 'term',
+  'MenuItem' => 'post',
+  'User' => 'user'
+];
 
-/**
- * Hook into all relevant database updates to populate the array above.
- */
+add_action('registered_post_type', function (string $post_type, WP_Post_Type $post_type_object) {
+  /**
+   * Noting to do if the type is not exposed over GraphQL, or if the type 
+   * names are not specified.
+   */
+  if (
+    !$post_type_object->show_in_graphql
+    || !$post_type_object->graphql_single_name
+    || !$post_type_object->graphql_plural_name
+  ) return;
 
-function map_post_type_to_graphql_type(string $post_type)
-{
-  $map = [
-    'post' => 'Post',
-    'page' => 'Page',
-    'nav_menu_item' => 'MenuItem'
-  ];
-  return $map[$post_type];
-};
+  /** Add an array to collect purges for this custom post type.  */
+  $GLOBALS['gcdn_purges'][$post_type_object->graphql_single_name] = [];
+
+  /** Extend the mapping from post type to GraphQL typename. */
+  $GLOBALS['gcdn_typename_map'][$post_type] = $post_type_object->graphql_single_name;
+
+  /** Extend the mapping from GraphQL typename to id prefix. */
+  $GLOBALS['gcdn_id_prefix_map'][$post_type_object->graphql_single_name] = 'post';
+}, 10, 2);
+
+add_action('registered_taxonomy', function (string $taxonomy, $object_type, array $args) {
+  /**
+   * Noting to do if the type is not exposed over GraphQL, or if the type 
+   * names are not specified.
+   */
+  if (
+    !$args['show_in_graphql']
+    || !$args['graphql_single_name']
+    || !$args['graphql_plural_name']
+  ) return;
+
+  /** Add an array to collect purges for this custom post type.  */
+  $GLOBALS['gcdn_purges'][$args['graphql_single_name']] = [];
+
+  /** Extend the mapping from post type to GraphQL typename. */
+  $GLOBALS['gcdn_typename_map'][$taxonomy] = $args['graphql_single_name'];
+
+  /** Extend the mapping from GraphQL typename to id prefix. */
+  $GLOBALS['gcdn_id_prefix_map'][$args['graphql_single_name']] = 'term';
+
+  /**
+   * This runs when creating a new term.
+   */
+  add_action("created_{$taxonomy}", function () use ($args) {
+    $GLOBALS['gcdn_purges']['purge_all'][] = $args['graphql_single_name'];
+  });
+
+  /**
+   * This runs when updating an existing term.
+   */
+  add_action("edited_{$taxonomy}", function (int $term_id) use ($args) {
+    $GLOBALS['gcdn_purges'][$args['graphql_single_name']][] = $term_id;
+  });
+
+  /**
+   * This runs when deleting a term.
+   */
+  add_action("delete_${taxonomy}", function (int $term_id) use ($args) {
+    $GLOBALS['gcdn_purges'][$args['graphql_single_name']][] = $term_id;
+  });
+}, 10, 3);
 
 /**
  * This runs when inserting or updating any post type. This also includes 
  * pages and menu items.
  */
 add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update) {
-  $type = map_post_type_to_graphql_type($post->post_type);
+  $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
   if (!$type) return;
 
   if ($update) {
@@ -208,7 +272,7 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
  * items.
  */
 add_action('deleted_post', function (int $post_id, WP_Post $post) {
-  $type = map_post_type_to_graphql_type($post->post_type);
+  $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
   if (!$type) return;
 
   $GLOBALS['gcdn_purges'][$type][] = $post_id;
@@ -340,61 +404,35 @@ function encode_ids(array $ids, string $type_prefix)
 
 add_action('shutdown', function () {
   /**
-   * Check if there is anything to purge.
-   */
-  if (
-    count($GLOBALS['gcdn_purges']['purge_all']) === 0
-    && count($GLOBALS['gcdn_purges']['Post']) === 0
-    && count($GLOBALS['gcdn_purges']['Page']) === 0
-    && count($GLOBALS['gcdn_purges']['Category']) === 0
-    && count($GLOBALS['gcdn_purges']['Tag']) === 0
-    && count($GLOBALS['gcdn_purges']['Comment']) === 0
-    && count($GLOBALS['gcdn_purges']['Menu']) === 0
-    && count($GLOBALS['gcdn_purges']['MenuItem']) === 0
-    && count($GLOBALS['gcdn_purges']['User']) === 0
-  ) return;
-
-  /**
    * Note that we don't deduplicate at all in the following. The admin api 
    * will take care of that.
    */
-  $query = '
-    mutation WPGraphCDNIntegration(
-      $soft: Boolean
-      $postIds: [ID!]
-      $pageIds: [ID!]
-      $categoryIds: [ID!]
-      $tagIds: [ID!]
-      $commentIds: [ID!]
-      $menuIds: [ID!]
-      $menuItemIds: [ID!]
-      $userIds: [ID!]
-    ) { 
-      purgePostById: purgePost(soft: $soft, id: $postIds)
-      purgePageById: purgePage(soft: $soft, id: $pageIds)
-      purgeCategoryById: purgeCategory(soft: $soft, id: $categoryIds)
-      purgeTagById: purgeTag(soft: $soft, id: $tagIds)
-      purgeCommentById: purgeComment(soft: $soft, id: $commentIds)
-      purgeMenuById: purgeMenu(soft: $soft, id: $menuIds)
-      purgeMenuItemById: purgeMenuItem(soft: $soft, id: $menuItemIds)
-      purgeUserById: purgeUser(soft: $soft, id: $userIds)
-  ';
 
-  foreach ($GLOBALS['gcdn_purges']['purge_all'] as $type)
-    $query .= 'purge' . $type . '(soft: $soft)' . "\n";
+  $variable_definitions = '$soft: Boolean';
+  $selection_set = '';
+  $variable_values = [];
+  foreach ($GLOBALS['gcdn_purges'] as $key => $value) {
+    if ($key === 'purge_all') {
+      /** Handle types where all entities should by purged. */
+      foreach ($value as $type) {
+        $selection_set .= "purge{$type}(soft: \$soft)\n";
+      }
+    } else if (count($value) > 0) {
+      /** Handle purging individual entities by their id. */
+      $variable_name = "\${$key}Ids";
+      $variable_definitions .= " {$variable_name}: [ID!]";
+      $selection_set .= "purge{$key}ById: purge{$key}(soft: \$soft, id: {$variable_name})\n";
+      $variable_values[$variable_name] = encode_ids($value, $GLOBALS['gcdn_id_prefix_map'][$key]);
+    }
+  }
 
-  $query .= '}';
+  /** Skip sending any request if there is nothing to purge. */
+  if ($selection_set === '') return;
 
-  $res = call_admin_api($query, [
-    'postIds' => encode_ids($GLOBALS['gcdn_purges']['Post'], 'post'),
-    'pageIds' => encode_ids($GLOBALS['gcdn_purges']['Page'], 'post'),
-    'categoryIds' => encode_ids($GLOBALS['gcdn_purges']['Category'], 'term'),
-    'tagIds' => encode_ids($GLOBALS['gcdn_purges']['Tag'], 'term'),
-    'commentIds' => encode_ids($GLOBALS['gcdn_purges']['Comment'], 'comment'),
-    'menuIds' => encode_ids($GLOBALS['gcdn_purges']['Menu'], 'term'),
-    'menuItemIds' => encode_ids($GLOBALS['gcdn_purges']['MenuItem'], 'post'),
-    'userIds' => encode_ids($GLOBALS['gcdn_purges']['User'], 'user'),
-  ]);
+  $query = "mutation WPGraphCDNIntegration(\$soft: Boolean {$variable_definitions}) {
+    {$selection_set}
+  }";
+  $res = call_admin_api($query, $variable_values);
 
   if ($res) {
     // Something went wrong, fall back to purging everything
