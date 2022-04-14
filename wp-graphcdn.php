@@ -441,7 +441,7 @@ add_action('shutdown', function () {
   /** Skip sending any request if there is nothing to purge. */
   if ($selection_set === '') return;
 
-  $query = "mutation WPGraphCDNIntegration(\$soft: Boolean {$variable_definitions}) {
+  $query = "mutation WPGraphCDNIntegration({$variable_definitions}) {
     {$selection_set}
   }";
   $err = call_admin_api($query, $variable_values);
