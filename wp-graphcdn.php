@@ -128,8 +128,9 @@ function render_caching_page()
  */
 
 add_action('admin_post_graphcdn_purge_all', function () {
-  $res = purge_all();
-  $query = $res ? 'failure=' . urlencode($res) : 'success=true';
+  $err = purge_all();
+  if (!$err) do_action('graphcdn_purge', ['has_purged_all' => true]);
+  $query = $err ? 'failure=' . urlencode($err) : 'success=true';
   wp_redirect('admin.php?page=graphql-caching&' . $query);
   exit;
 });
@@ -141,7 +142,8 @@ add_action('admin_post_graphcdn_purge_all', function () {
  */
 
 $GLOBALS['gcdn_purges'] = [
-  'purge_all' => [],
+  'has_purged_all' => false,
+  'purged_types' => [],
   'Post' => [],
   'Page' => [],
   'Category' => [],
@@ -214,7 +216,7 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
    * This runs when creating a new term.
    */
   add_action("created_{$taxonomy}", function () use ($args) {
-    $GLOBALS['gcdn_purges']['purge_all'][] = $args['graphql_single_name'];
+    $GLOBALS['gcdn_purges']['purged_types'][] = $args['graphql_single_name'];
   });
 
   /**
@@ -250,7 +252,7 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
      * When a new post or page has been created, purge all things related to 
      * that entity
      */
-    $GLOBALS['gcdn_purges']['purge_all'][] = $type;
+    $GLOBALS['gcdn_purges']['purged_types'][] = $type;
   }
 
   /**
@@ -262,8 +264,8 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
    * TODO: Implement a more fine-grained purging for this case.
    */
   if ($type === 'Post') {
-    $GLOBALS['gcdn_purges']['purge_all'][] = 'Category';
-    $GLOBALS['gcdn_purges']['purge_all'][] = 'Tag';
+    $GLOBALS['gcdn_purges']['purged_types'][] = 'Category';
+    $GLOBALS['gcdn_purges']['purged_types'][] = 'Tag';
   }
 }, 10, 3);
 
@@ -282,7 +284,7 @@ add_action('deleted_post', function (int $post_id, WP_Post $post) {
  * This runs when creating a new category.
  */
 add_action('created_category', function () {
-  $GLOBALS['gcdn_purges']['purge_all'][] = 'Category';
+  $GLOBALS['gcdn_purges']['purged_types'][] = 'Category';
 });
 
 /**
@@ -303,7 +305,7 @@ add_action('delete_category', function (int $category_id) {
  * This runs when creating a new tag.
  */
 add_action('created_post_tag', function () {
-  $GLOBALS['gcdn_purges']['purge_all'][] = 'Tag';
+  $GLOBALS['gcdn_purges']['purged_types'][] = 'Tag';
 });
 
 /**
@@ -324,7 +326,7 @@ add_action('delete_post_tag', function (int $tag_id) {
  * This runs when a new comment is created.
  */
 add_action('wp_insert_comment', function () {
-  $GLOBALS['gcdn_purges']['purge_all'][] = 'Comment';
+  $GLOBALS['gcdn_purges']['purged_types'][] = 'Comment';
 });
 
 /**
@@ -357,7 +359,7 @@ add_action('wp_update_comment_count', function (int $post_id) {
  * This runs when a new menu is created.
  */
 add_action('wp_create_nav_menu', function () {
-  $GLOBALS['gcdn_purges']['purge_all'][] = 'Menu';
+  $GLOBALS['gcdn_purges']['purged_types'][] = 'Menu';
 });
 
 /**
@@ -371,7 +373,7 @@ add_action('wp_delete_nav_menu', function (int $menu_id) {
  * This runs when a new user is created.
  */
 add_action('user_register', function () {
-  $GLOBALS['gcdn_purges']['purge_all'][] = 'User';
+  $GLOBALS['gcdn_purges']['purged_types'][] = 'User';
 });
 
 /**
@@ -412,17 +414,27 @@ add_action('shutdown', function () {
   $selection_set = '';
   $variable_values = [];
   foreach ($GLOBALS['gcdn_purges'] as $key => $value) {
-    if ($key === 'purge_all') {
-      /** Handle types where all entities should by purged. */
-      foreach ($value as $type) {
-        $selection_set .= "purge{$type}(soft: \$soft)\n";
-      }
-    } else if (count($value) > 0) {
-      /** Handle purging individual entities by their id. */
-      $variable_name = "\${$key}Ids";
-      $variable_definitions .= " {$variable_name}: [ID!]";
-      $selection_set .= "purge{$key}ById: purge{$key}(soft: \$soft, id: {$variable_name})\n";
-      $variable_values[$variable_name] = encode_ids($value, $GLOBALS['gcdn_id_prefix_map'][$key]);
+    switch ($key) {
+      case 'has_purged_all':
+        if ($value) {
+          $selection_set .= '_purgeAll(soft: $soft)';
+        }
+        break;
+      case 'purged_types':
+        /** Handle types where all entities should by purged. */
+        foreach ($value as $type) {
+          $selection_set .= "purge{$type}(soft: \$soft)\n";
+        }
+        break;
+      default:
+        if (count($value) > 0) {
+          /** Handle purging individual entities by their id. */
+          $variable_name = "\${$key}Ids";
+          $variable_definitions .= " {$variable_name}: [ID!]";
+          $selection_set .= "purge{$key}ById: purge{$key}(soft: \$soft, id: {$variable_name})\n";
+          $variable_values[$variable_name] = encode_ids($value, $GLOBALS['gcdn_id_prefix_map'][$key]);
+        }
+        break;
     }
   }
 
@@ -432,12 +444,15 @@ add_action('shutdown', function () {
   $query = "mutation WPGraphCDNIntegration(\$soft: Boolean {$variable_definitions}) {
     {$selection_set}
   }";
-  $res = call_admin_api($query, $variable_values);
+  $err = call_admin_api($query, $variable_values);
 
-  if ($res) {
+  if ($err) {
     // Something went wrong, fall back to purging everything
+    $GLOBALS['gcdn_purges']['has_purged_all'] = true;
     purge_all();
   }
+
+  do_action('graphcdn_purge', $GLOBALS['gcdn_purges']);
 });
 
 
