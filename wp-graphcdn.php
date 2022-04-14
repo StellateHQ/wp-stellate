@@ -171,6 +171,12 @@ $GLOBALS['gcdn_id_prefix_map'] = [
   'User' => 'user'
 ];
 
+function add_purge_entity(string $key, $value)
+{
+  if (!in_array($value, $GLOBALS['gcdn_purges'][$key], true))
+    $GLOBALS['gcdn_purges'][$key][] = $value;
+}
+
 add_action('registered_post_type', function (string $post_type, WP_Post_Type $post_type_object) {
   /**
    * Noting to do if the type is not exposed over GraphQL, or if the type 
@@ -216,21 +222,21 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
    * This runs when creating a new term.
    */
   add_action("created_{$taxonomy}", function () use ($args) {
-    $GLOBALS['gcdn_purges']['purged_types'][] = $args['graphql_single_name'];
+    add_purge_entity('purged_types', $args['graphql_single_name']);
   });
 
   /**
    * This runs when updating an existing term.
    */
   add_action("edited_{$taxonomy}", function (int $term_id) use ($args) {
-    $GLOBALS['gcdn_purges'][$args['graphql_single_name']][] = $term_id;
+    add_purge_entity($args['graphql_single_name'], $term_id);
   });
 
   /**
    * This runs when deleting a term.
    */
   add_action("delete_${taxonomy}", function (int $term_id) use ($args) {
-    $GLOBALS['gcdn_purges'][$args['graphql_single_name']][] = $term_id;
+    add_purge_entity($args['graphql_single_name'], $term_id);
   });
 }, 10, 3);
 
@@ -246,13 +252,13 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
     /**
      * When a post or page has been updated, purge just this one post
      */
-    $GLOBALS['gcdn_purges'][$type][] = $post_id;
+    add_purge_entity($type, $post_id);
   } else {
     /**
      * When a new post or page has been created, purge all things related to 
      * that entity
      */
-    $GLOBALS['gcdn_purges']['purged_types'][] = $type;
+    add_purge_entity('purged_types', $type);
   }
 
   /**
@@ -264,8 +270,8 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
    * TODO: Implement a more fine-grained purging for this case.
    */
   if ($type === 'Post') {
-    $GLOBALS['gcdn_purges']['purged_types'][] = 'Category';
-    $GLOBALS['gcdn_purges']['purged_types'][] = 'Tag';
+    add_purge_entity('purged_types', 'Category');
+    add_purge_entity('purged_types', 'Tag');
   }
 }, 10, 3);
 
@@ -276,57 +282,56 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
 add_action('deleted_post', function (int $post_id, WP_Post $post) {
   $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
   if (!$type) return;
-
-  $GLOBALS['gcdn_purges'][$type][] = $post_id;
+  add_purge_entity($type, $post_id);
 }, 10, 2);
 
 /**
  * This runs when creating a new category.
  */
 add_action('created_category', function () {
-  $GLOBALS['gcdn_purges']['purged_types'][] = 'Category';
+  add_purge_entity('purged_types', 'Category');
 });
 
 /**
  * This runs when updating an existing category.
  */
 add_action('edited_category', function (int $category_id) {
-  $GLOBALS['gcdn_purges']['Category'][] = $category_id;
+  add_purge_entity('Category', $category_id);
 });
 
 /**
  * This runs when deleting a category.
  */
 add_action('delete_category', function (int $category_id) {
-  $GLOBALS['gcdn_purges']['Category'][] = $category_id;
+  add_purge_entity('Category', $category_id);
 });
 
 /**
  * This runs when creating a new tag.
  */
 add_action('created_post_tag', function () {
-  $GLOBALS['gcdn_purges']['purged_types'][] = 'Tag';
+  add_purge_entity('purged_types', 'Tag');
 });
 
 /**
  * This runs when updating an existing tag.
  */
 add_action('edited_post_tag', function (int $tag_id) {
-  $GLOBALS['gcdn_purges']['Tag'][] = $tag_id;
+  add_purge_entity('Tag', $tag_id);
 });
 
 /**
  * This runs when deleting a tag.
  */
 add_action('delete_post_tag', function (int $tag_id) {
-  $GLOBALS['gcdn_purges']['Tag'][] = $tag_id;
+  add_purge_entity('Tag', $tag_id);
 });
 
 /**
  * This runs when a new comment is created.
  */
 add_action('wp_insert_comment', function () {
-  $GLOBALS['gcdn_purges']['purged_types'][] = 'Comment';
+  add_purge_entity('purged_types', 'Comment');
 });
 
 /**
@@ -338,56 +343,56 @@ add_action('wp_insert_comment', function () {
  * - Deleting a comment irreversibly
  */
 add_action('wp_set_comment_status', function (int $comment_id) {
-  $GLOBALS['gcdn_purges']['Comment'][] = $comment_id;
+  add_purge_entity('Comment', $comment_id);
 });
 
 /**
  * This runs when the content of a comment is updated.
  */
 add_action('edit_comment', function (int $comment_id) {
-  $GLOBALS['gcdn_purges']['Comment'][] = $comment_id;
+  add_purge_entity('Comment', $comment_id);
 });
 
 /**
  * This runs when the count of comments for a post is updated.
  */
 add_action('wp_update_comment_count', function (int $post_id) {
-  $GLOBALS['gcdn_purges']['Post'][] = $post_id;
+  add_purge_entity('Post', $post_id);
 });
 
 /**
  * This runs when a new menu is created.
  */
 add_action('wp_create_nav_menu', function () {
-  $GLOBALS['gcdn_purges']['purged_types'][] = 'Menu';
+  add_purge_entity('purged_types', 'Menu');
 });
 
 /**
  * This runs when a menu is deleted.
  */
 add_action('wp_delete_nav_menu', function (int $menu_id) {
-  $GLOBALS['gcdn_purges']['Menu'][] = $menu_id;
+  add_purge_entity('Menu', $menu_id);
 });
 
 /**
  * This runs when a new user is created.
  */
 add_action('user_register', function () {
-  $GLOBALS['gcdn_purges']['purged_types'][] = 'User';
+  add_purge_entity('purged_types', 'User');
 });
 
 /**
  * This runs when an existing user is updated.
  */
 add_action('profile_update', function (int $user_id) {
-  $GLOBALS['gcdn_purges']['User'][] = $user_id;
+  add_purge_entity('User', $user_id);
 });
 
 /**
  * This runs when a user is deleted.
  */
 add_action('delete_user', function (int $user_id) {
-  $GLOBALS['gcdn_purges']['User'][] = $user_id;
+  add_purge_entity('User', $user_id);
 });
 
 
@@ -405,11 +410,6 @@ function encode_ids(array $ids, string $type_prefix)
 };
 
 add_action('shutdown', function () {
-  /**
-   * Note that we don't deduplicate at all in the following. The admin api 
-   * will take care of that.
-   */
-
   $variable_definitions = '$soft: Boolean';
   $selection_set = '';
   $variable_values = [];
