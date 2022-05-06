@@ -8,6 +8,8 @@
  * Author: GraphCDN
  * Author URI: https://graphcdn.io
  * Version: 0.1.0
+ * License: GPL-3
+ * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
  * @package  GraphCDN
  * @author   GraphCDN
@@ -484,7 +486,7 @@ function call_admin_api($query, $variables)
 
   $variables['soft'] = get_option('graphcdn_soft_purge') !== 'off';
 
-  $res = wp_remote_post('https://admin-dev.graphcdn.io/' . $service_name, array(
+  $res = wp_remote_post('https://admin.graphcdn.io/' . $service_name, array(
     'headers' => array(
       'content-type' => 'application/json',
       'graphcdn-token' => $token
