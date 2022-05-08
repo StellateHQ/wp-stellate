@@ -75,14 +75,14 @@ function render_caching_page()
           <tr>
             <th scope="row">Service name</th>
             <td>
-              <input type="text" name="graphcdn_service_name" class="regular-text" value="<?= esc_attr($service_name) ?>" />
+              <input type="text" name="graphcdn_service_name" class="regular-text" value="<?php echo esc_attr($service_name) ?>" />
               <p><?php esc_attr_e('Enter the name of your GraphCDN service. Without this the GraphCDN plugin will do nothing.', 'WpAdminStyle'); ?></p>
             </td>
           </tr>
           <tr>
             <th scope="row">Purging token</th>
             <td>
-              <input type="password" name="graphcdn_purging_token" class="regular-text" value="<?= esc_attr($token) ?>" />
+              <input type="password" name="graphcdn_purging_token" class="regular-text" value="<?php echo esc_attr($token) ?>" />
               <p><?php esc_attr_e('Enter a purging token created for the GraphCDN service entered above. Without this the GraphCDN plugin will do nothing.', 'WpAdminStyle'); ?></p>
             </td>
           </tr>
@@ -90,7 +90,7 @@ function render_caching_page()
             <th scope="row">Use soft purging</th>
             <td>
               <label>
-                <input name="graphcdn_soft_purge" type="checkbox" <?= esc_attr($soft_purge) ?> />
+                <input name="graphcdn_soft_purge" type="checkbox" <?php echo esc_attr($soft_purge) ?> />
                 <span><?php esc_attr_e('When using soft purging, the cache continues to serve stale data while it is revalidated in the background.', 'WpAdminStyle'); ?></span>
               </label>
             </td>
