@@ -1,6 +1,7 @@
-=== WPGraphQL ===
+=== GraphCDN ===
 Tags: GraphCDN, GraphQL, WPGraphQL, API, Caching, Performance
 Requires at least: 5.0
+Tested up to: 5.9.3
 Requires PHP: 7.1
 Stable tag: 0.1.0
 License: GPL-3
