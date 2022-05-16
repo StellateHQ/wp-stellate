@@ -7,7 +7,7 @@
  * Description: GraphCDN for your WordPress GraphQL API
  * Author: GraphCDN
  * Author URI: https://graphcdn.io
- * Version: 0.1.0
+ * Version: 0.1.1
  * Requires at least: 5.0
  * Tested up to: 5.9.3
  * Requires PHP: 7.1
@@ -16,7 +16,7 @@
  *
  * @package  GraphCDN
  * @author   GraphCDN
- * @version  0.1.0
+ * @version  0.1.1
  */
 
 /**
