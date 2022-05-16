@@ -188,9 +188,9 @@ add_action('registered_post_type', function (string $post_type, WP_Post_Type $po
    * names are not specified.
    */
   if (
-    !$post_type_object->show_in_graphql
-    || !$post_type_object->graphql_single_name
-    || !$post_type_object->graphql_plural_name
+    !isset($post_type_object->show_in_graphql)
+    || !isset($post_type_object->graphql_single_name)
+    || !$post_type_object->show_in_graphql
   ) return;
 
   /** Add an array to collect purges for this custom post type.  */
@@ -209,9 +209,9 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
    * names are not specified.
    */
   if (
-    !$args['show_in_graphql']
-    || !$args['graphql_single_name']
-    || !$args['graphql_plural_name']
+    !isset($args['show_in_graphql'])
+    || !isset($args['graphql_single_name'])
+    || !$args['show_in_graphql']
   ) return;
 
   /** Add an array to collect purges for this custom post type.  */
