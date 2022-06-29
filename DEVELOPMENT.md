@@ -6,7 +6,7 @@ plugin folder by executing the following command in the folder where the local
 WordPress site is located:
 
 ```sh
-ln -s /path/to/this/repo/wp-graphcdn ./wp-content/plugins/wp-graphcdn
+ln -s /path/to/this/repo/wp-stellate ./wp-content/plugins/wp-stellate
 ```
 
 It's convenient to develop the plugin while having it installed and activated
@@ -24,7 +24,7 @@ Make sure you have `svn` installed on your machine for the following.
 First, checkout the subversion repository on your local machine:
 
 ```sh
-svn checkout https://plugins.svn.wordpress.org/graphcdn my-folder
+svn checkout https://plugins.svn.wordpress.org/stellate my-folder
 ```
 
 Then, copy the current plugin code that you want to release into the `trunk`
@@ -33,7 +33,7 @@ no files remain that have already been removed in git.
 
 ```sh
 rm -rf my-folder/trunk/*
-cp /path/to/wp-graphcdn/* my-folder/trunk
+cp /path/to/wp-stellate/* my-folder/trunk
 ```
 
 Before moving on, make sure that the stable version in the `readme.txt` file 
@@ -56,12 +56,12 @@ svn copy trunk tags/x.y.z
 ```
 
 Now you can commit the changes. This will also push the commit to the remote
-SVN repository, so you need to authorize. Pass the username `graphcdn` via the
-`--username` flag and enter the password when promted. You can find these 
+SVN repository, so you need to authorize. Pass the username `stellatehq` via 
+the `--username` flag and enter the password when promted. You can find these 
 credentials in our shared 1Password.
 
 ```sh
-svn commit -m 'tagging x.y.z' --username graphcdn
+svn commit -m 'tagging x.y.z' --username stellatehq
 ```
 
 ## Updating assets or readme.txt
