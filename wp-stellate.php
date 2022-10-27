@@ -250,8 +250,8 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
  * pages and menu items.
  */
 add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update) {
+  if (!array_key_exists($post->post_type, $GLOBALS['gcdn_typename_map'])) return;
   $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
-  if (!$type) return;
 
   if ($update) {
     /**
@@ -285,8 +285,8 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
  * items.
  */
 add_action('deleted_post', function (int $post_id, WP_Post $post) {
+  if (!array_key_exists($post->post_type, $GLOBALS['gcdn_typename_map'])) return;
   $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
-  if (!$type) return;
   stellate_add_purge_entity($type, $post_id);
 }, 10, 2);
 
