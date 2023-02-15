@@ -437,7 +437,7 @@ add_action('shutdown', function () {
           $uppercase_key = ucfirst($key);
           $variable_name = "\${$key}Ids";
           $variable_definitions .= " {$variable_name}: [ID!]";
-          $selection_set .= "purge{$key}ById: purge{$uppercase_key}(soft: \$soft, id: {$variable_name})\n";
+          $selection_set .= "purge{$uppercase_key}ById: purge{$uppercase_key}(soft: \$soft, id: {$variable_name})\n";
           $variable_values[$variable_name] = stellate_encode_ids($value, $GLOBALS['gcdn_id_prefix_map'][$key]);
         }
         break;
