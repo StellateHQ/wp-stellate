@@ -90,6 +90,9 @@ function stellate_render_caching_page()
             <td>
               <input type="password" name="stellate_purging_token" class="regular-text" value="<?php echo esc_attr($concealed_token) ?>" />
               <input type="hidden" name="stellate_touched_purging_token" value="0" />
+              <noscript>
+                <input type="hidden" name="stellate_touched_purging_token" value="1" />
+              </noscript>
               <p><?php esc_attr_e('Enter a purging token created for the Stellate service entered above. Without this the Stellate plugin will do nothing.', 'WpAdminStyle'); ?></p>
             </td>
           </tr>
