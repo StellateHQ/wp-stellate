@@ -105,12 +105,12 @@ function stellate_render_caching_page()
       <input type="hidden" name="action" value="stellate_purge_all" />
       <?php submit_button('Purge', 'secondary') ?>
     </form>
-    <?php if ($_GET['success']) { ?>
+    <?php if (isset($_GET['success'])) { ?>
       <div class="notice notice-success inline">
-        <p>Purging succeeeded!</p>
+        <p>Purging succeeded!</p>
       </div>
     <?php } ?>
-    <?php if ($_GET['failure']) { ?>
+    <?php if (isset($_GET['failure'])) { ?>
       <div class="notice notice-error inline">
         <p>
           <?php
