@@ -35,7 +35,13 @@ if (!defined('ABSPATH')) {
 
 add_action('admin_init', function () {
   register_setting('stellate', 'stellate_service_name');
-  register_setting('stellate', 'stellate_purging_token');
+  register_setting('stellate', 'stellate_purging_token', [
+    'sanitize_callback' => function ($token) {
+      $hasChanged = (boolean) $_POST["stellate_touched_purging_token"];
+
+      return $hasChanged ? $token : get_option('stellate_purging_token');
+    }
+  ]);
   register_setting('stellate', 'stellate_soft_purge');
 });
 
@@ -59,7 +65,7 @@ add_action('admin_menu', function () {
 function stellate_render_caching_page()
 {
   $service_name = get_option('stellate_service_name');
-  $token = get_option('stellate_purging_token') ? "******" : "";
+  $concealed_token = str_repeat('*', strlen(get_option('stellate_purging_token')));
   $soft_purge = get_option('stellate_soft_purge') === 'on' ? 'checked' : '';
 ?>
   <div class="wrap">
@@ -82,7 +88,8 @@ function stellate_render_caching_page()
           <tr>
             <th scope="row">Purging token</th>
             <td>
-              <input type="password" name="stellate_purging_token" class="regular-text" value="<?php echo esc_attr($token) ?>" />
+              <input type="password" name="stellate_purging_token" class="regular-text" value="<?php echo esc_attr($concealed_token) ?>" />
+              <input type="hidden" name="stellate_touched_purging_token" value="0" />
               <p><?php esc_attr_e('Enter a purging token created for the Stellate service entered above. Without this the Stellate plugin will do nothing.', 'WpAdminStyle'); ?></p>
             </td>
           </tr>
@@ -99,6 +106,12 @@ function stellate_render_caching_page()
       </table>
       <?php submit_button() ?>
     </form>
+    <script>
+    document.querySelector('input[name="stellate_purging_token"]').addEventListener('input', function () {
+      document.querySelector('input[name="stellate_touched_purging_token"]').value = 1;
+    });
+    </script>
+
     <h3>Purge the entire cache</h3>
     <p>By clicking the following button you purge all contents from the cache of your Stellate service.</p>
     <form action="admin-post.php" method="POST">
