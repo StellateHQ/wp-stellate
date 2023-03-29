@@ -7,16 +7,16 @@
  * Description: Stellate for your WordPress GraphQL API
  * Author: Stellate
  * Author URI: https://stellate.co
- * Version: 0.1.3
+ * Version: 0.1.4
  * Requires at least: 5.0
- * Tested up to: 6.1.0
+ * Tested up to: 6.2
  * Requires PHP: 7.1
  * License: GPL-3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
  * @package  Stellate
  * @author   Stellate
- * @version  0.1.3
+ * @version  0.1.4
  */
 
 /**
@@ -184,7 +184,7 @@ function stellate_add_purge_entity(string $key, $value)
 
 add_action('registered_post_type', function (string $post_type, WP_Post_Type $post_type_object) {
   /**
-   * Noting to do if the type is not exposed over GraphQL, or if the type 
+   * Noting to do if the type is not exposed over GraphQL, or if the type
    * names are not specified.
    */
   if (
@@ -205,7 +205,7 @@ add_action('registered_post_type', function (string $post_type, WP_Post_Type $po
 
 add_action('registered_taxonomy', function (string $taxonomy, $object_type, array $args) {
   /**
-   * Noting to do if the type is not exposed over GraphQL, or if the type 
+   * Noting to do if the type is not exposed over GraphQL, or if the type
    * names are not specified.
    */
   if (
@@ -246,7 +246,7 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
 }, 10, 3);
 
 /**
- * This runs when inserting or updating any post type. This also includes 
+ * This runs when inserting or updating any post type. This also includes
  * pages and menu items.
  */
 add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update) {
@@ -260,18 +260,18 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
     stellate_add_purge_entity($type, $post_id);
   } else {
     /**
-     * When a new post or page has been created, purge all things related to 
+     * When a new post or page has been created, purge all things related to
      * that entity
      */
     stellate_add_purge_entity('purged_types', $type);
   }
 
   /**
-   * The "edit_category" action does not seem to be called when adding or 
-   * removing a categories to posts. Same story for tags. But we do need 
+   * The "edit_category" action does not seem to be called when adding or
+   * removing a categories to posts. Same story for tags. But we do need
    * to purge the cache for these types, because the count of linked posts
    * might have changed. So to be safe, we purge aggressively here.
-   * 
+   *
    * TODO: Implement a more fine-grained purging for this case.
    */
   if ($type === 'Post') {
@@ -281,7 +281,7 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
 }, 10, 3);
 
 /**
- * This runs when deleting a post type. This also includes pages and menu 
+ * This runs when deleting a post type. This also includes pages and menu
  * items.
  */
 add_action('deleted_post', function (int $post_id, WP_Post $post) {
@@ -340,7 +340,7 @@ add_action('wp_insert_comment', function () {
 });
 
 /**
- * This runs when the status of a comment is updated. This catches all of 
+ * This runs when the status of a comment is updated. This catches all of
  * the following actions:
  * - Approving or un-approvind a comment
  * - Marking a comment as spam or not-spam
