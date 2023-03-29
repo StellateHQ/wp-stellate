@@ -7,16 +7,16 @@
  * Description: Stellate for your WordPress GraphQL API
  * Author: Stellate
  * Author URI: https://stellate.co
- * Version: 0.1.3
+ * Version: 0.1.4
  * Requires at least: 5.0
- * Tested up to: 6.1.0
+ * Tested up to: 6.2.0
  * Requires PHP: 7.1
  * License: GPL-3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
  * @package  Stellate
  * @author   Stellate
- * @version  0.1.3
+ * @version  0.1.4
  */
 
 /**
@@ -35,7 +35,13 @@ if (!defined('ABSPATH')) {
 
 add_action('admin_init', function () {
   register_setting('stellate', 'stellate_service_name');
-  register_setting('stellate', 'stellate_purging_token');
+  register_setting('stellate', 'stellate_purging_token', [
+    'sanitize_callback' => function ($token) {
+      $hasChanged = (boolean) $_POST["stellate_touched_purging_token"];
+
+      return $hasChanged ? $token : get_option('stellate_purging_token');
+    }
+  ]);
   register_setting('stellate', 'stellate_soft_purge');
 });
 
@@ -59,9 +65,10 @@ add_action('admin_menu', function () {
 function stellate_render_caching_page()
 {
   $service_name = get_option('stellate_service_name');
-  $token = get_option('stellate_purging_token') ? "******" : "";
+  $concealed_token = str_repeat('*', strlen(get_option('stellate_purging_token')));
   $soft_purge = get_option('stellate_soft_purge') === 'on' ? 'checked' : '';
 ?>
+  <?php echo get_option('stellate_purging_token') ?>
   <div class="wrap">
     <h2>GraphQL Edge Caching with Stellate</h2>
     <h3>Settings</h3>
@@ -82,7 +89,11 @@ function stellate_render_caching_page()
           <tr>
             <th scope="row">Purging token</th>
             <td>
-              <input type="password" name="stellate_purging_token" class="regular-text" value="<?php echo esc_attr($token) ?>" />
+              <input type="password" name="stellate_purging_token" class="regular-text" value="<?php echo esc_attr($concealed_token) ?>" />
+              <input type="hidden" name="stellate_touched_purging_token" value="0" />
+              <noscript>
+                <input type="hidden" name="stellate_touched_purging_token" value="1" />
+              </noscript>
               <p><?php esc_attr_e('Enter a purging token created for the Stellate service entered above. Without this the Stellate plugin will do nothing.', 'WpAdminStyle'); ?></p>
             </td>
           </tr>
@@ -99,18 +110,24 @@ function stellate_render_caching_page()
       </table>
       <?php submit_button() ?>
     </form>
+    <script>
+    document.querySelector('input[name="stellate_purging_token"]').addEventListener('input', function () {
+      document.querySelector('input[name="stellate_touched_purging_token"]').value = 1;
+    });
+    </script>
+
     <h3>Purge the entire cache</h3>
     <p>By clicking the following button you purge all contents from the cache of your Stellate service.</p>
     <form action="admin-post.php" method="POST">
       <input type="hidden" name="action" value="stellate_purge_all" />
       <?php submit_button('Purge', 'secondary') ?>
     </form>
-    <?php if ($_GET['success']) { ?>
+    <?php if (isset($_GET['success'])) { ?>
       <div class="notice notice-success inline">
-        <p>Purging succeeeded!</p>
+        <p>Purging succeeded!</p>
       </div>
     <?php } ?>
-    <?php if ($_GET['failure']) { ?>
+    <?php if (isset($_GET['failure'])) { ?>
       <div class="notice notice-error inline">
         <p>
           <?php
@@ -184,7 +201,7 @@ function stellate_add_purge_entity(string $key, $value)
 
 add_action('registered_post_type', function (string $post_type, WP_Post_Type $post_type_object) {
   /**
-   * Noting to do if the type is not exposed over GraphQL, or if the type 
+   * Noting to do if the type is not exposed over GraphQL, or if the type
    * names are not specified.
    */
   if (
@@ -205,7 +222,7 @@ add_action('registered_post_type', function (string $post_type, WP_Post_Type $po
 
 add_action('registered_taxonomy', function (string $taxonomy, $object_type, array $args) {
   /**
-   * Noting to do if the type is not exposed over GraphQL, or if the type 
+   * Noting to do if the type is not exposed over GraphQL, or if the type
    * names are not specified.
    */
   if (
@@ -246,7 +263,7 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
 }, 10, 3);
 
 /**
- * This runs when inserting or updating any post type. This also includes 
+ * This runs when inserting or updating any post type. This also includes
  * pages and menu items.
  */
 add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update) {
@@ -260,18 +277,18 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
     stellate_add_purge_entity($type, $post_id);
   } else {
     /**
-     * When a new post or page has been created, purge all things related to 
+     * When a new post or page has been created, purge all things related to
      * that entity
      */
     stellate_add_purge_entity('purged_types', $type);
   }
 
   /**
-   * The "edit_category" action does not seem to be called when adding or 
-   * removing a categories to posts. Same story for tags. But we do need 
+   * The "edit_category" action does not seem to be called when adding or
+   * removing a categories to posts. Same story for tags. But we do need
    * to purge the cache for these types, because the count of linked posts
    * might have changed. So to be safe, we purge aggressively here.
-   * 
+   *
    * TODO: Implement a more fine-grained purging for this case.
    */
   if ($type === 'Post') {
@@ -281,7 +298,7 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
 }, 10, 3);
 
 /**
- * This runs when deleting a post type. This also includes pages and menu 
+ * This runs when deleting a post type. This also includes pages and menu
  * items.
  */
 add_action('deleted_post', function (int $post_id, WP_Post $post) {
@@ -340,7 +357,7 @@ add_action('wp_insert_comment', function () {
 });
 
 /**
- * This runs when the status of a comment is updated. This catches all of 
+ * This runs when the status of a comment is updated. This catches all of
  * the following actions:
  * - Approving or un-approvind a comment
  * - Marking a comment as spam or not-spam
