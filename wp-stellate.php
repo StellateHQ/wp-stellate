@@ -9,7 +9,7 @@
  * Author URI: https://stellate.co
  * Version: 0.1.4
  * Requires at least: 5.0
- * Tested up to: 6.2
+ * Tested up to: 6.2.0
  * Requires PHP: 7.1
  * License: GPL-3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -68,6 +68,7 @@ function stellate_render_caching_page()
   $concealed_token = str_repeat('*', strlen(get_option('stellate_purging_token')));
   $soft_purge = get_option('stellate_soft_purge') === 'on' ? 'checked' : '';
 ?>
+  <?php echo get_option('stellate_purging_token') ?>
   <div class="wrap">
     <h2>GraphQL Edge Caching with Stellate</h2>
     <h3>Settings</h3>
