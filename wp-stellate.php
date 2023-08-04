@@ -7,16 +7,16 @@
  * Description: Stellate for your WordPress GraphQL API
  * Author: Stellate
  * Author URI: https://stellate.co
- * Version: 0.1.4
+ * Version: 0.1.5
  * Requires at least: 5.0
- * Tested up to: 6.2.0
+ * Tested up to: 6.3.0
  * Requires PHP: 7.1
  * License: GPL-3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
  * @package  Stellate
  * @author   Stellate
- * @version  0.1.4
+ * @version  0.1.5
  */
 
 /**
@@ -37,7 +37,7 @@ add_action('admin_init', function () {
   register_setting('stellate', 'stellate_service_name');
   register_setting('stellate', 'stellate_purging_token', [
     'sanitize_callback' => function ($token) {
-      $hasChanged = (boolean) $_POST["stellate_touched_purging_token"];
+      $hasChanged = (bool) $_POST["stellate_touched_purging_token"];
 
       return $hasChanged ? $token : get_option('stellate_purging_token');
     }
@@ -111,9 +111,9 @@ function stellate_render_caching_page()
       <?php submit_button() ?>
     </form>
     <script>
-    document.querySelector('input[name="stellate_purging_token"]').addEventListener('input', function () {
-      document.querySelector('input[name="stellate_touched_purging_token"]').value = 1;
-    });
+      document.querySelector('input[name="stellate_purging_token"]').addEventListener('input', function() {
+        document.querySelector('input[name="stellate_touched_purging_token"]').value = 1;
+      });
     </script>
 
     <h3>Purge the entire cache</h3>
