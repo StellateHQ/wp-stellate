@@ -81,6 +81,11 @@ cd my-folder
 svn add trunk/*
 ```
 
+> **Note**
+> This command will likely "fail" for all files that did already exist in a prior version.
+> We run this command to make sure that any newly added files are known to the SVN system.
+> There is no "staging area" like in git and all changes to existing files will be synced in the command below by copying to a new tag.
+
 To create the new tag, copy the trunk into a new folder in `tags`. We
 strive to use semantic versioning, so replace `x`, `y`, and `z` with 
 the approproate numbers.
