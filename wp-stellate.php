@@ -423,11 +423,14 @@ add_action('delete_user', function (int $user_id) {
  * When all is done, call the admin API and purge all the entities that we
  * collected previously.
  */
-
-function stellate_encode_ids(array $ids, string $type_prefix)
+function stellate_encode_ids_as_key_field_inputs(string $key, array $ids)
 {
+  $type_prefix = $GLOBALS['gcdn_id_prefix_map'][$key];
+  $type = ucfirst($key);
+
   return array_map(function ($id) use ($type_prefix) {
-    return base64_encode($type_prefix . ':' . $id);
+    $encoded_id = base64_encode($type_prefix . ':' . $id);
+    return array("name"=>"id", "value"=>$encoded_id);
   }, $ids);
 };
 
@@ -445,17 +448,18 @@ add_action('shutdown', function () {
       case 'purged_types':
         /** Handle types where all entities should by purged. */
         foreach ($value as $type) {
-          $selection_set .= "purge{$type}(soft: \$soft)\n";
+          $uppercase_type = ucfirst($type);
+          $selection_set .= "purge{$uppercase_type}: _purgeType(type: \"{$uppercase_type}\", soft: \$soft)\n";
         }
         break;
       default:
         if (count($value) > 0) {
           /** Handle purging individual entities by their id. */
           $uppercase_key = ucfirst($key);
-          $variable_name = "\${$key}Ids";
-          $variable_definitions .= " {$variable_name}: [ID!]";
-          $selection_set .= "purge{$uppercase_key}ById: purge{$uppercase_key}(soft: \$soft, id: {$variable_name})\n";
-          $variable_values[$variable_name] = stellate_encode_ids($value, $GLOBALS['gcdn_id_prefix_map'][$key]);
+          $variable_name = "{$key}Ids";
+          $variable_definitions .= " \${$variable_name}: [KeyFieldInput!]";
+          $selection_set .= "purge{$uppercase_key}ById: _purgeType(type: \"{$uppercase_key}\", soft: \$soft, keyFields: \${$variable_name})\n";
+          $variable_values[$variable_name] = stellate_encode_ids_as_key_field_inputs($key, $value);
         }
         break;
     }
@@ -489,7 +493,7 @@ add_action('shutdown', function () {
  */
 function stellate_purge_all()
 {
-  return stellate_call_admin_api('mutation ($soft: Boolean) { _purgeAll(soft: $soft) }', []);
+  return stellate_call_admin_api('mutation WPStellateIntegration_PurgeAll ($soft: Boolean) { _purgeAll(soft: $soft) }', []);
 }
 
 /**
