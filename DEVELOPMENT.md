@@ -1,18 +1,52 @@
 # Development
 
 A very easy way to set up WordPress locally is [Local](https://localwp.com/).
-Once you have a WordPress website running, you can link this folder into the
-plugin folder by executing the following command in the folder where the local
+It's convenient to develop the plugin while having it installed and activated
+in an actual WordPress site where you can play around with it!
+
+> **Note**
+> You don't need to create an account to be able to create a new local Wordpress instance
+
+Once you have a WordPress website running, click "Go to site folder" to open your installation in Finder. 
+You can drag & drop this folder into your shell of choice to get the path pasted. Then navigate to the actual WordPress installation in `app/public`
+
+```sh
+cd <your site installation path>
+cd app/public/
+```
+
+You can now link this folder into the plugin folder by executing the following command in the folder where the local
 WordPress site is located:
+
+> **Note**
+> An easy way to obtain the path where this repo lives, is running `pwd`
 
 ```sh
 ln -s /path/to/this/repo/wp-stellate ./wp-content/plugins/wp-stellate
 ```
 
-It's convenient to develop the plugin while having it installed and activated
-in an actual WordPress site where you can play around with it!
+Next, open up the WP Admin panel and log in with the credentials you entered during WordPress installation. 
+On the left, navigate to "Plugins" and add a new one. Search for "GraphQL" and install the "WPGraphQL" plugin and activate it.
 
-TODO: Figure out how to ideomatically do local development for plugins.
+Now you should see in the left navigation a "GraphQL" section that contains a sub-item called "Caching". In there, configure the service name and purging token to use.
+
+Debugging in WordPress can be hard, you can try your luck with some plugins, or stay oldschool:
+
+```php
+function stellate_log( $msg, $name = '' )
+{
+    // Print the name of the calling function if $name is left empty
+    $trace=debug_backtrace();
+    $name = ( '' == $name ) ? $trace[1]['function'] : $name;
+
+    $error_dir = '/path/to/wordpress/installation/app/public/wp-content/stellate-plugin.log';
+    $msg = print_r( $msg, true );
+    $log = $name . "  |  " . $msg . "\n";
+    error_log( $log, 3, $error_dir );
+}
+
+stellate_log('something you want to see printed');
+```
 
 ## Releasing a new version
 
