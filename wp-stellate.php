@@ -456,9 +456,9 @@ add_action('shutdown', function () {
         if (count($value) > 0) {
           /** Handle purging individual entities by their id. */
           $uppercase_key = ucfirst($key);
-          $variable_name = "\${$key}Ids";
-          $variable_definitions .= " {$variable_name}: [KeyFieldInput!]";
-          $selection_set .= "purge{$uppercase_key}ById: _purgeType(type: \"{$uppercase_key}\", soft: \$soft, keyFields: {$variable_name})\n";
+          $variable_name = "{$key}Ids";
+          $variable_definitions .= " \${$variable_name}: [KeyFieldInput!]";
+          $selection_set .= "purge{$uppercase_key}ById: _purgeType(type: \"{$uppercase_key}\", soft: \$soft, keyFields: \${$variable_name})\n";
           $variable_values[$variable_name] = stellate_encode_ids_as_key_field_inputs($key, $value);
         }
         break;
