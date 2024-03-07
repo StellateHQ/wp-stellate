@@ -28,25 +28,6 @@ if (!defined('ABSPATH')) {
 }
 
 
-/**
- * TEMP: Add custom post type
- */
-add_action( 'init', function() {
-   register_post_type( 'product', [
-      'show_ui' => true, # whether you want the post_type to show in the WP Admin UI. Doesn't affect WPGraphQL Schema.
-      'labels'  => [
-        //@see https://developer.wordpress.org/themes/functionality/internationalization/
-        'menu_name' => __( 'Products', 'your-textdomain' ), # The label for the WP Admin. Doesn't affect the WPGraphQL Schema.
-      ],
-      'hierarchical' => true, # set to false if you don't want parent/child relationships for the entries
-      'show_in_graphql' => true, # Set to false if you want to exclude this type from the GraphQL Schema
-      'graphql_single_name' => 'product',
-      'graphql_plural_name' => 'products', # If set to the same name as graphql_single_name, the field name will default to `all${graphql_single_name}`, i.e. `allDocument`.
-      'public' => true, # set to false if entries of the post_type should not have public URIs per entry
-      'publicly_queryable' => true, # Set to false if entries should only be queryable in WPGraphQL by authenticated requests
-   ] );
-} );
-
 
 /**
  * Register the settings
@@ -522,9 +503,6 @@ function stellate_purge_all()
  */
 function stellate_call_admin_api($query, $variables)
 {
-  stellate_log($query);
-  stellate_log($variables);
-
   $service_name = get_option('stellate_service_name');
   $token = get_option('stellate_purging_token');
 
@@ -562,16 +540,4 @@ function stellate_call_admin_api($query, $variables)
   }
 
   return null;
-}
-
-function stellate_log( $msg, $name = '' )
-{
-    // Print the name of the calling function if $name is left empty
-    $trace=debug_backtrace();
-    $name = ( '' == $name ) ? $trace[1]['function'] : $name;
-
-    $error_dir = '/Users/thomasheyenbrock/Local Sites/wpstellatedev/app/public/wp-content/stellate-plugin.log';
-    $msg = print_r( $msg, true );
-    $log = $name . "  |  " . $msg . "\n";
-    error_log( $log, 3, $error_dir );
 }
