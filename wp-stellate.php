@@ -509,7 +509,7 @@ function stellate_call_admin_api($query, $variables)
   // If we don't have service name and token, we can't invalidate
   if (!$service_name || !$token) return false;
 
-  $variables['soft'] = get_option('stellate_soft_purge') !== 'off';
+  $variables['soft'] = get_option('stellate_soft_purge') === 'on';
 
   $res = wp_remote_post('https://admin.stellate.co/' . $service_name, array(
     'headers' => array(
