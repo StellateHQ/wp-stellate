@@ -7,7 +7,7 @@ in an actual WordPress site where you can play around with it!
 > **Note**
 > You don't need to create an account to be able to create a new local Wordpress instance
 
-Once you have a WordPress website running, click "Go to site folder" to open your installation in Finder. 
+Once you have a WordPress website running, click "Go to site folder" to open your installation in Finder.
 You can drag & drop this folder into your shell of choice to get the path pasted. Then navigate to the actual WordPress installation in `app/public`
 
 ```sh
@@ -25,7 +25,7 @@ WordPress site is located:
 ln -s /path/to/this/repo/wp-stellate ./wp-content/plugins/wp-stellate
 ```
 
-Next, open up the WP Admin panel and log in with the credentials you entered during WordPress installation. 
+Next, open up the WP Admin panel and log in with the credentials you entered during WordPress installation.
 On the left, navigate to "Plugins" and add a new one. Search for "GraphQL" and install the "WPGraphQL" plugin and activate it.
 
 Now you should see in the left navigation a "GraphQL" section that contains a sub-item called "Caching". In there, configure the service name and purging token to use.
@@ -70,10 +70,10 @@ rm -rf my-folder/trunk/*
 cp /path/to/wp-stellate/* my-folder/trunk
 ```
 
-Before moving on, make sure that the stable version in the `readme.txt` file 
+Before moving on, make sure that the stable version in the `readme.txt` file
 is set to the version you're about to create.
 
-Move into the folder that contains the SVN repository and add all the files 
+Move into the folder that contains the SVN repository and add all the files
 you just changed:
 
 ```sh
@@ -87,7 +87,7 @@ svn add trunk/*
 > There is no "staging area" like in git and all changes to existing files will be synced in the command below by copying to a new tag.
 
 To create the new tag, copy the trunk into a new folder in `tags`. We
-strive to use semantic versioning, so replace `x`, `y`, and `z` with 
+strive to use semantic versioning, so replace `x`, `y`, and `z` with
 the approproate numbers.
 
 ```sh
@@ -95,8 +95,8 @@ svn copy trunk tags/x.y.z
 ```
 
 Now you can commit the changes. This will also push the commit to the remote
-SVN repository, so you need to authorize. Pass the username `stellatehq` via 
-the `--username` flag and enter the password when promted. You can find these 
+SVN repository, so you need to authorize. Pass the username `stellatehq` via
+the `--username` flag and enter the password when promted. You can find these
 credentials in our shared 1Password.
 
 ```sh
