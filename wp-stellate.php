@@ -201,13 +201,15 @@ function stellate_add_purge_entity(string $key, $value)
 
 add_action('registered_post_type', function (string $post_type, WP_Post_Type $post_type_object) {
   /**
-   * Noting to do if the type is not exposed over GraphQL, or if the type
-   * names are not specified.
+   * Nothing to do if the type is not exposed over GraphQL, or if the type
+   * names are not specified, or if the type is not publicly visible (admin-only
+   * CPTs exposed for tooling don't need cache invalidation).
    */
   if (
     !isset($post_type_object->show_in_graphql)
     || !isset($post_type_object->graphql_single_name)
     || !$post_type_object->show_in_graphql
+    || !($post_type_object->public || $post_type_object->publicly_queryable)
   ) return;
 
   /** Add an array to collect purges for this custom post type.  */
@@ -222,13 +224,14 @@ add_action('registered_post_type', function (string $post_type, WP_Post_Type $po
 
 add_action('registered_taxonomy', function (string $taxonomy, $object_type, array $args) {
   /**
-   * Noting to do if the type is not exposed over GraphQL, or if the type
-   * names are not specified.
+   * Nothing to do if the type is not exposed over GraphQL, or if the type
+   * names are not specified, or if the taxonomy is not publicly visible.
    */
   if (
     !isset($args['show_in_graphql'])
     || !isset($args['graphql_single_name'])
     || !$args['show_in_graphql']
+    || empty($args['public'])
   ) return;
 
   /** Add an array to collect purges for this custom post type.  */
@@ -404,11 +407,25 @@ add_action('user_register', function () {
 });
 
 /**
- * This runs when an existing user is updated.
+ * This runs when an existing user is updated. We only purge if a public-facing
+ * field actually changed — private updates (password, email, internal meta)
+ * don't need cache invalidation.
  */
-add_action('profile_update', function (int $user_id) {
-  stellate_add_purge_entity('User', $user_id);
-});
+add_action('profile_update', function (int $user_id, $old_user_data) {
+  if (!$old_user_data instanceof WP_User) return;
+  $new_user_data = get_userdata($user_id);
+  if (!$new_user_data) return;
+
+  // Fields exposed via the WPGraphQL User type. Add more here if your schema
+  // extends the User type with additional public fields.
+  $public_fields = ['user_nicename', 'user_url', 'display_name'];
+  foreach ($public_fields as $field) {
+    if ($old_user_data->$field !== $new_user_data->$field) {
+      stellate_add_purge_entity('User', $user_id);
+      return;
+    }
+  }
+}, 10, 2);
 
 /**
  * This runs when a user is deleted.
