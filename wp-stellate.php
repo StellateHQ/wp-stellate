@@ -71,6 +71,61 @@ function stellate_render_caching_page()
   <?php echo get_option('stellate_purging_token') ?>
   <div class="wrap">
     <h2>GraphQL Edge Caching with Stellate</h2>
+
+    <?php
+    $smart_cache_active = stellate_is_smart_cache_active();
+    $smart_cache_object_cache_on = stellate_smart_cache_object_cache_enabled();
+    $smart_cache_settings_url = admin_url('admin.php?page=graphql-settings');
+    $smart_cache_install_url = admin_url('plugin-install.php?s=wpgraphql-smart-cache&tab=search&type=term');
+    ?>
+
+    <?php if ($smart_cache_active && $smart_cache_object_cache_on): ?>
+      <div class="notice notice-warning">
+        <p>
+          <strong>⚠️ Smart Cache object cache is enabled.</strong>
+          Your WordPress origin is caching GraphQL responses that Stellate's
+          edge already caches — this adds memory pressure on your server
+          without any speed benefit.
+        </p>
+        <p>
+          Open the
+          <a href="<?php echo esc_url($smart_cache_settings_url); ?>">WPGraphQL settings</a>
+          and turn off Smart Cache's <em>"Use Object Cache"</em> option.
+          The invalidation events that Stellate relies on will keep working.
+        </p>
+      </div>
+    <?php elseif ($smart_cache_active): ?>
+      <div class="notice notice-success">
+        <p>
+          <strong>✓ Smart Cache adapter active.</strong>
+          Using WPGraphQL Smart Cache for comprehensive event detection
+          (post meta, term relationships, comments, custom fields, and more).
+          Stellate handles caching at the edge.
+        </p>
+      </div>
+    <?php else: ?>
+      <div class="notice notice-info">
+        <p>
+          <strong>💡 Recommended: install WPGraphQL Smart Cache</strong>
+          for richer invalidation coverage — ACF / custom field changes,
+          taxonomy assignments, comment lifecycle, author archive refresh,
+          and smart filtering of autosaves and drafts.
+        </p>
+        <p>
+          Once installed and activated, Stellate detects it automatically and
+          switches to adapter mode. <strong>After activating</strong>, open
+          <a href="<?php echo esc_url($smart_cache_settings_url); ?>">WPGraphQL settings</a>
+          and turn off Smart Cache's <em>"Use Object Cache"</em> option —
+          Stellate's edge replaces that layer.
+        </p>
+        <p>
+          <a href="<?php echo esc_url($smart_cache_install_url); ?>" class="button button-primary">
+            Install Smart Cache
+          </a>
+        </p>
+      </div>
+    <?php endif; ?>
+
     <h3>Settings</h3>
     <form action="options.php" method="POST" autocomplete="off">
       <?php
@@ -459,6 +514,22 @@ add_action('delete_user', function (int $user_id) {
 function stellate_is_smart_cache_active()
 {
   return class_exists('\WPGraphQL\SmartCache\Cache\Invalidation');
+}
+
+/**
+ * Check whether Smart Cache's GraphQL object cache layer is enabled. When it
+ * is, the WordPress origin caches GraphQL responses that Stellate's edge is
+ * already caching — wasted memory with no speed benefit, since Stellate is
+ * still going to serve from the edge.
+ *
+ * Returns false safely if Smart Cache is missing or its API surface changed.
+ */
+function stellate_smart_cache_object_cache_enabled()
+{
+  if (!stellate_is_smart_cache_active()) return false;
+  if (!class_exists('\WPGraphQL\SmartCache\Admin\Settings')) return false;
+  if (!method_exists('\WPGraphQL\SmartCache\Admin\Settings', 'caching_enabled')) return false;
+  return (bool) \WPGraphQL\SmartCache\Admin\Settings::caching_enabled();
 }
 
 function stellate_register_adapter_hooks()
