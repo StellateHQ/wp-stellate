@@ -282,19 +282,6 @@ add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update
      */
     stellate_add_purge_entity('purged_types', $type);
   }
-
-  /**
-   * The "edit_category" action does not seem to be called when adding or
-   * removing a categories to posts. Same story for tags. But we do need
-   * to purge the cache for these types, because the count of linked posts
-   * might have changed. So to be safe, we purge aggressively here.
-   *
-   * TODO: Implement a more fine-grained purging for this case.
-   */
-  if ($type === 'Post') {
-    stellate_add_purge_entity('purged_types', 'Category');
-    stellate_add_purge_entity('purged_types', 'Tag');
-  }
 }, 10, 3);
 
 /**
@@ -306,6 +293,38 @@ add_action('deleted_post', function (int $post_id, WP_Post $post) {
   $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
   stellate_add_purge_entity($type, $post_id);
 }, 10, 2);
+
+/**
+ * This runs whenever terms are assigned to or removed from an object (post).
+ * It replaces the aggressive Category/Tag purge that used to run on every Post
+ * update. By diffing the new and old term_taxonomy_id lists, we only purge
+ * the specific terms whose post associations actually changed.
+ */
+add_action('set_object_terms', function ($object_id, $terms, $tt_ids, $taxonomy, $append, $old_tt_ids) {
+  // Bail if this taxonomy isn't exposed over GraphQL
+  if (!array_key_exists($taxonomy, $GLOBALS['gcdn_typename_map'])) return;
+  $type = $GLOBALS['gcdn_typename_map'][$taxonomy];
+
+  // Find term_taxonomy_ids that were added or removed
+  $added_tt_ids = array_diff($tt_ids, $old_tt_ids);
+  $removed_tt_ids = array_diff($old_tt_ids, $tt_ids);
+  $affected_tt_ids = array_merge($added_tt_ids, $removed_tt_ids);
+
+  // Nothing actually changed (re-assigning the same terms) — skip
+  if (empty($affected_tt_ids)) return;
+
+  // Convert term_taxonomy_ids to term_ids and queue purges for each affected term
+  foreach ($affected_tt_ids as $tt_id) {
+    $term = get_term_by('term_taxonomy_id', $tt_id, $taxonomy);
+    if ($term && !is_wp_error($term)) {
+      stellate_add_purge_entity($type, $term->term_id);
+    }
+  }
+
+  // List queries that filter by this taxonomy type may also be stale
+  // (e.g., "categories with at least one post" lists change when posts gain/lose terms)
+  stellate_add_purge_entity('purged_types', $type);
+}, 10, 6);
 
 /**
  * This runs when creating a new category.
