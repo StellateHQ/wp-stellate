@@ -263,38 +263,83 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
 }, 10, 3);
 
 /**
- * This runs when inserting or updating any post type. This also includes
- * pages and menu items.
+ * Listen for post status transitions to classify CREATE / DELETE cleanly.
+ * Replaces the old wp_insert_post handler, which fired on auto-drafts and
+ * missed trash/untrash + scheduled-publish (those don't route through
+ * wp_insert_post in modern WordPress).
+ *
+ * Publish->publish updates are handled by post_updated below, which has
+ * access to the column-level diff.
  */
-add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update) {
+add_action('transition_post_status', function (string $new_status, string $old_status, WP_Post $post) {
+  // Skip autosaves and revisions defensively
+  if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+  if (wp_is_post_revision($post->ID) || wp_is_post_autosave($post->ID)) return;
+
+  // Skip intermediate statuses — no user-visible content yet
+  if (in_array($new_status, ['auto-draft', 'inherit', 'new'], true)) return;
+
+  // Skip draft-to-draft saves (private editing)
+  if ($new_status === 'draft' && $old_status === 'draft') return;
+
+  // Skip transitions that don't touch 'publish' on either side
+  if ($new_status !== 'publish' && $old_status !== 'publish') return;
+
+  // Skip post types we don't track
   if (!array_key_exists($post->post_type, $GLOBALS['gcdn_typename_map'])) return;
   $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
 
-  if ($update) {
-    /**
-     * When a post or page has been updated, purge just this one post
-     */
-    stellate_add_purge_entity($type, $post_id);
-  } else {
-    /**
-     * When a new post or page has been created, purge all things related to
-     * that entity
-     */
+  if ($old_status !== 'publish' && $new_status === 'publish') {
+    // CREATE / first publish — list queries become stale
+    stellate_add_purge_entity('purged_types', $type);
+    stellate_add_purge_entity($type, $post->ID);
+  } elseif ($old_status === 'publish' && $new_status !== 'publish') {
+    // DELETE / unpublish / trash — purge this post + list queries
+    stellate_add_purge_entity($type, $post->ID);
     stellate_add_purge_entity('purged_types', $type);
   }
+  // publish->publish: handled by post_updated below (it has the column diff)
+}, 10, 3);
 
-  /**
-   * The "edit_category" action does not seem to be called when adding or
-   * removing a categories to posts. Same story for tags. But we do need
-   * to purge the cache for these types, because the count of linked posts
-   * might have changed. So to be safe, we purge aggressively here.
-   *
-   * TODO: Implement a more fine-grained purging for this case.
-   */
-  if ($type === 'Post') {
-    stellate_add_purge_entity('purged_types', 'Category');
-    stellate_add_purge_entity('purged_types', 'Tag');
+/**
+ * Listen for post_updated to handle publish->publish updates with a column-level
+ * diff. Skips purges entirely when nothing publicly visible changed (e.g., a
+ * plugin or background process touched the post but didn't change any field
+ * the GraphQL API exposes).
+ */
+add_action('post_updated', function (int $post_id, WP_Post $post_after, WP_Post $post_before) {
+  if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+  if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) return;
+
+  // Only handle publish->publish here. Transitions are handled by
+  // transition_post_status above.
+  if ($post_after->post_status !== 'publish' || $post_before->post_status !== 'publish') return;
+
+  // Skip post types we don't track
+  if (!array_key_exists($post_after->post_type, $GLOBALS['gcdn_typename_map'])) return;
+  $type = $GLOBALS['gcdn_typename_map'][$post_after->post_type];
+
+  // Diff public-facing columns. If nothing the public can see changed, skip.
+  $public_columns = [
+    'post_title', 'post_content', 'post_excerpt', 'post_author',
+    'post_name', 'post_parent', 'menu_order', 'post_date_gmt', 'post_password'
+  ];
+  $changed = false;
+  foreach ($public_columns as $col) {
+    if ($post_before->$col !== $post_after->$col) {
+      $changed = true;
+      break;
+    }
   }
+  if (!$changed) return;
+
+  // Author change moves the post between authors' archives
+  if ($post_before->post_author !== $post_after->post_author) {
+    stellate_add_purge_entity('User', (int) $post_before->post_author);
+    stellate_add_purge_entity('User', (int) $post_after->post_author);
+  }
+
+  stellate_add_purge_entity($type, $post_id);
 }, 10, 3);
 
 /**
