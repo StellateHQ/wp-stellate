@@ -267,6 +267,14 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
  * pages and menu items.
  */
 add_action('wp_insert_post', function (int $post_id, WP_Post $post, bool $update) {
+  // Skip events that don't change anything user-facing:
+  // - autosaves fire every few seconds in Gutenberg
+  // - revisions are tracked by WordPress core (and some plugins like ACF)
+  // - auto-draft / inherit / new are intermediate statuses with no public content
+  if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+  if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) return;
+  if (in_array($post->post_status, ['auto-draft', 'inherit', 'new'], true)) return;
+
   if (!array_key_exists($post->post_type, $GLOBALS['gcdn_typename_map'])) return;
   $type = $GLOBALS['gcdn_typename_map'][$post->post_type];
 
