@@ -76,7 +76,7 @@ function stellate_render_caching_page()
     $smart_cache_active = stellate_is_smart_cache_active();
     $smart_cache_object_cache_on = stellate_smart_cache_object_cache_enabled();
     $smart_cache_settings_url = admin_url('admin.php?page=graphql-settings');
-    $smart_cache_install_url = admin_url('plugin-install.php?s=wpgraphql-smart-cache&tab=search&type=term');
+    $smart_cache_install_url = admin_url('plugin-install.php?tab=plugin-information&plugin=wpgraphql-smart-cache');
     ?>
 
     <?php if ($smart_cache_active && $smart_cache_object_cache_on): ?>
@@ -95,7 +95,7 @@ function stellate_render_caching_page()
         </p>
       </div>
     <?php elseif ($smart_cache_active): ?>
-      <div class="notice notice-success">
+      <div class="notice notice-success is-dismissible">
         <p>
           <strong>✓ Smart Cache adapter active.</strong>
           Using WPGraphQL Smart Cache for comprehensive event detection
@@ -118,11 +118,17 @@ function stellate_render_caching_page()
           and turn off Smart Cache's <em>"Use Object Cache"</em> option —
           Stellate's edge replaces that layer.
         </p>
-        <p>
-          <a href="<?php echo esc_url($smart_cache_install_url); ?>" class="button button-primary">
-            Install Smart Cache
-          </a>
-        </p>
+        <?php if (current_user_can('install_plugins')): ?>
+          <p>
+            <a href="<?php echo esc_url($smart_cache_install_url); ?>" class="button button-primary">
+              Install Smart Cache
+            </a>
+          </p>
+        <?php else: ?>
+          <p>
+            <em>Ask a site administrator with plugin-install permissions to add WPGraphQL Smart Cache.</em>
+          </p>
+        <?php endif; ?>
       </div>
     <?php endif; ?>
 
@@ -513,7 +519,10 @@ add_action('delete_user', function (int $user_id) {
 
 function stellate_is_smart_cache_active()
 {
-  return class_exists('\WPGraphQL\SmartCache\Cache\Invalidation');
+  // Smart Cache defines this constant unconditionally at the top of its main
+  // plugin file, so it's available before any 'init' or 'plugins_loaded'
+  // hooks fire — more reliable than checking for an autoloaded class.
+  return defined('WPGRAPHQL_SMART_CACHE_VERSION');
 }
 
 /**
