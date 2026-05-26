@@ -262,6 +262,19 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
   });
 }, 10, 3);
 
+
+
+/**
+ * Register the legacy event listeners that translate WordPress events
+ * directly into Stellate purge mutations. Used as the default mode when
+ * the WPGraphQL Smart Cache plugin is NOT installed.
+ *
+ * When Smart Cache IS installed, the adapter mode (defined below) handles
+ * event translation instead, and these listeners are not registered.
+ */
+function stellate_register_legacy_hooks()
+{
+
 /**
  * This runs when inserting or updating any post type. This also includes
  * pages and menu items.
@@ -416,6 +429,140 @@ add_action('profile_update', function (int $user_id) {
 add_action('delete_user', function (int $user_id) {
   stellate_add_purge_entity('User', $user_id);
 });
+
+} // end of stellate_register_legacy_hooks
+
+
+
+/**
+ * Smart Cache adapter mode.
+ *
+ * When the WPGraphQL Smart Cache plugin is active, we delegate event detection
+ * to it. Smart Cache fires `do_action('graphql_purge', $key, $event, $hostname)`
+ * with one of four key shapes:
+ *
+ *   1. Relay global ID (base64 of "<type>:<id>", e.g. "cG9zdDoxMjM=" = "post:123")
+ *   2. "list:<lowercase_type>"     — when a list-shaped query goes stale
+ *   3. "skipped:<lowercase_type>"  — header-overflow fallback
+ *   4. "graphql:Query"             — purge everything
+ *
+ * Our translator decodes each key and queues an equivalent entry into
+ * $GLOBALS['gcdn_purges'], which the existing shutdown handler then sends to
+ * Stellate's admin API as a single batched mutation.
+ *
+ * Smart Cache provides what wp-stellate does not on its own: post meta tracking
+ * (ACF, custom fields), term relationship tracking, comprehensive filters
+ * (autosaves, private meta, draft-to-draft), comment lifecycle, menu visibility,
+ * and interface type expansion.
+ */
+
+function stellate_is_smart_cache_active()
+{
+  return class_exists('\WPGraphQL\SmartCache\Cache\Invalidation');
+}
+
+function stellate_register_adapter_hooks()
+{
+  add_action('graphql_purge', 'stellate_translate_graphql_purge_key', 10, 3);
+}
+
+function stellate_translate_graphql_purge_key($key, $event = '', $hostname = '')
+{
+  // Purge everything
+  if ($key === 'graphql:Query') {
+    $GLOBALS['gcdn_purges']['has_purged_all'] = true;
+    return;
+  }
+
+  // list:<type> — purge all responses of this type (catches empty-list staleness)
+  if (strpos($key, 'list:') === 0) {
+    $type = stellate_resolve_graphql_type(substr($key, 5));
+    if ($type !== null) {
+      stellate_ensure_purge_bucket($type);
+      stellate_add_purge_entity('purged_types', $type);
+    }
+    return;
+  }
+
+  // skipped:<type> — header-overflow fallback, broad type purge
+  if (strpos($key, 'skipped:') === 0) {
+    $type = stellate_resolve_graphql_type(substr($key, 8));
+    if ($type !== null) {
+      stellate_ensure_purge_bucket($type);
+      stellate_add_purge_entity('purged_types', $type);
+    }
+    return;
+  }
+
+  // Otherwise, treat as Relay global ID: base64("<type>:<id>")
+  $decoded = base64_decode($key, true);
+  if ($decoded === false || strpos($decoded, ':') === false) return;
+
+  list($type_prefix, $id) = explode(':', $decoded, 2);
+  $type = stellate_resolve_graphql_type($type_prefix);
+  if ($type === null || !is_numeric($id)) return;
+
+  stellate_ensure_purge_bucket($type);
+  stellate_add_purge_entity($type, (int) $id);
+}
+
+/**
+ * Resolve a lowercase type slug (from Smart Cache) to the GraphQL typename
+ * used as a bucket key in $GLOBALS['gcdn_purges'].
+ *
+ * Smart Cache uses lowercase slugs like "post", "page", "category". Our
+ * typename map gets populated with whatever WPGraphQL set as graphql_single_name
+ * — typically lowercase too. We also handle the capitalized hardcoded init
+ * buckets ('Post', 'Page', etc.) as a fallback.
+ */
+function stellate_resolve_graphql_type($lowercase_type)
+{
+  // Direct match (most common case)
+  if (array_key_exists($lowercase_type, $GLOBALS['gcdn_purges'])) {
+    return $lowercase_type;
+  }
+
+  // Case-insensitive scan of the typename map
+  foreach ($GLOBALS['gcdn_typename_map'] as $graphql_type) {
+    if (strtolower($graphql_type) === strtolower($lowercase_type)) {
+      return $graphql_type;
+    }
+  }
+
+  // Capitalized fallback (matches hardcoded init buckets)
+  $capitalized = ucfirst($lowercase_type);
+  if (array_key_exists($capitalized, $GLOBALS['gcdn_purges'])) {
+    return $capitalized;
+  }
+
+  return null;
+}
+
+/**
+ * Ensure a bucket exists for the type in $GLOBALS['gcdn_purges']. Smart Cache
+ * may emit purges for types whose registered_post_type / registered_taxonomy
+ * callback didn't run with show_in_graphql=true (e.g. cross-request flows).
+ */
+function stellate_ensure_purge_bucket($type)
+{
+  if (!isset($GLOBALS['gcdn_purges'][$type])) {
+    $GLOBALS['gcdn_purges'][$type] = [];
+  }
+}
+
+
+
+/**
+ * On plugins_loaded (priority 20, after Smart Cache loads), decide which mode
+ * we're in and register the appropriate hooks. Exactly one mode runs.
+ */
+add_action('plugins_loaded', function () {
+  if (stellate_is_smart_cache_active()) {
+    stellate_register_adapter_hooks();
+  } else {
+    stellate_register_legacy_hooks();
+  }
+}, 20);
 
 
 
