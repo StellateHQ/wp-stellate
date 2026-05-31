@@ -564,7 +564,21 @@ function stellate_translate_graphql_purge_key($key, $event = '', $hostname = '')
     return;
   }
 
-  // skipped:<type> — header-overflow fallback, broad type purge
+  // skipped:term — header-overflow fallback for taxonomy terms. Smart Cache
+  // uses 'term' generically for any taxonomy, so we can't recover which
+  // specific taxonomy was affected. Conservatively purge every GraphQL-exposed
+  // taxonomy type.
+  if ($key === 'skipped:term') {
+    foreach ($GLOBALS['gcdn_typename_map'] as $wp_type => $graphql_type) {
+      if (taxonomy_exists($wp_type)) {
+        stellate_ensure_purge_bucket($graphql_type);
+        stellate_add_purge_entity('purged_types', $graphql_type);
+      }
+    }
+    return;
+  }
+
+  // skipped:<type> — header-overflow fallback for non-term types
   if (strpos($key, 'skipped:') === 0) {
     $type = stellate_resolve_graphql_type(substr($key, 8));
     if ($type !== null) {
@@ -579,8 +593,24 @@ function stellate_translate_graphql_purge_key($key, $event = '', $hostname = '')
   if ($decoded === false || strpos($decoded, ':') === false) return;
 
   list($type_prefix, $id) = explode(':', $decoded, 2);
+  if (!is_numeric($id)) return;
+
+  // 'term' is a generic Smart Cache prefix for any taxonomy term — resolve
+  // it to the actual taxonomy's GraphQL type via a term lookup.
+  if ($type_prefix === 'term') {
+    $term = get_term((int) $id);
+    if (!is_wp_error($term) && $term instanceof WP_Term) {
+      if (isset($GLOBALS['gcdn_typename_map'][$term->taxonomy])) {
+        $type = $GLOBALS['gcdn_typename_map'][$term->taxonomy];
+        stellate_ensure_purge_bucket($type);
+        stellate_add_purge_entity($type, (int) $id);
+      }
+    }
+    return;
+  }
+
   $type = stellate_resolve_graphql_type($type_prefix);
-  if ($type === null || !is_numeric($id)) return;
+  if ($type === null) return;
 
   stellate_ensure_purge_bucket($type);
   stellate_add_purge_entity($type, (int) $id);
