@@ -564,27 +564,18 @@ function stellate_translate_graphql_purge_key($key, $event = '', $hostname = '')
     return;
   }
 
-  // skipped:term — header-overflow fallback for taxonomy terms. Smart Cache
-  // uses 'term' generically for any taxonomy, so we can't recover which
-  // specific taxonomy was affected. Conservatively purge every GraphQL-exposed
-  // taxonomy type.
-  if ($key === 'skipped:term') {
-    foreach ($GLOBALS['gcdn_typename_map'] as $wp_type => $graphql_type) {
-      if (taxonomy_exists($wp_type)) {
-        stellate_ensure_purge_bucket($graphql_type);
-        stellate_add_purge_entity('purged_types', $graphql_type);
-      }
-    }
-    return;
-  }
-
-  // skipped:<type> — header-overflow fallback for non-term types
+  // skipped:<type> — Smart Cache emits these as a safety net for CDN
+  // architectures with HTTP header size limits (X-GraphQL-Keys caps at
+  // 4000 bytes). When a response is tagged with too many node IDs to fit
+  // in the header, the truncated portion is represented by 'skipped:<type>'
+  // so the CDN can broadly invalidate that type.
+  //
+  // Stellate's edge does its own server-side tagging without header limits
+  // — the specific Relay IDs that fire alongside every 'skipped:<type>'
+  // are sufficient for precise invalidation. Translating 'skipped:*' here
+  // would only cause over-purging (e.g., one category change purging all
+  // Categories, Tags, PostFormats, etc.).
   if (strpos($key, 'skipped:') === 0) {
-    $type = stellate_resolve_graphql_type(substr($key, 8));
-    if ($type !== null) {
-      stellate_ensure_purge_bucket($type);
-      stellate_add_purge_entity('purged_types', $type);
-    }
     return;
   }
 
