@@ -257,7 +257,7 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
   /**
    * This runs when deleting a term.
    */
-  add_action("delete_${taxonomy}", function (int $term_id) use ($args) {
+  add_action("delete_{$taxonomy}", function (int $term_id) use ($args) {
     stellate_add_purge_entity($args['graphql_single_name'], $term_id);
   });
 }, 10, 3);
