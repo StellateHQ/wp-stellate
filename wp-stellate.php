@@ -7,7 +7,7 @@
  * Description: Stellate for your WordPress GraphQL API
  * Author: Stellate
  * Author URI: https://stellate.co
- * Version: 0.1.8
+ * Version: 0.2.0
  * Requires at least: 5.0
  * Tested up to: 6.4.0
  * Requires PHP: 7.1
@@ -16,7 +16,7 @@
  *
  * @package  Stellate
  * @author   Stellate
- * @version  0.1.8
+ * @version  0.2.0
  */
 
 /**
