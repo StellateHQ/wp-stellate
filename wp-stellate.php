@@ -7,7 +7,7 @@
  * Description: Stellate for your WordPress GraphQL API
  * Author: Stellate
  * Author URI: https://stellate.co
- * Version: 0.1.9
+ * Version: 0.1.10
  * Requires at least: 5.0
  * Tested up to: 6.4.0
  * Requires PHP: 7.1
@@ -16,7 +16,7 @@
  *
  * @package  Stellate
  * @author   Stellate
- * @version  0.1.9
+ * @version  0.1.10
  */
 
 /**
@@ -257,7 +257,7 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
   /**
    * This runs when deleting a term.
    */
-  add_action("delete_${taxonomy}", function (int $term_id) use ($args) {
+  add_action("delete_{$taxonomy}", function (int $term_id) use ($args) {
     stellate_add_purge_entity($args['graphql_single_name'], $term_id);
   });
 }, 10, 3);
