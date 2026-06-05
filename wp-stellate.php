@@ -7,7 +7,7 @@
  * Description: Stellate for your WordPress GraphQL API
  * Author: Stellate
  * Author URI: https://stellate.co
- * Version: 0.1.10
+ * Version: 0.2.0
  * Requires at least: 5.0
  * Tested up to: 6.4.0
  * Requires PHP: 7.1
@@ -16,7 +16,7 @@
  *
  * @package  Stellate
  * @author   Stellate
- * @version  0.1.10
+ * @version  0.2.0
  */
 
 /**
@@ -71,6 +71,67 @@ function stellate_render_caching_page()
   <?php echo get_option('stellate_purging_token') ?>
   <div class="wrap">
     <h2>GraphQL Edge Caching with Stellate</h2>
+
+    <?php
+    $smart_cache_active = stellate_is_smart_cache_active();
+    $smart_cache_object_cache_on = stellate_smart_cache_object_cache_enabled();
+    $smart_cache_settings_url = admin_url('admin.php?page=graphql-settings');
+    $smart_cache_install_url = admin_url('plugin-install.php?tab=plugin-information&plugin=wpgraphql-smart-cache');
+    ?>
+
+    <?php if ($smart_cache_active && $smart_cache_object_cache_on): ?>
+      <div class="notice notice-warning">
+        <p>
+          <strong>⚠️ Smart Cache object cache is enabled.</strong>
+          Your WordPress origin is caching GraphQL responses that Stellate's
+          edge already caches — this adds memory pressure on your server
+          without any speed benefit.
+        </p>
+        <p>
+          Open the
+          <a href="<?php echo esc_url($smart_cache_settings_url); ?>">WPGraphQL settings</a>
+          and turn off Smart Cache's <em>"Use Object Cache"</em> option.
+          The invalidation events that Stellate relies on will keep working.
+        </p>
+      </div>
+    <?php elseif ($smart_cache_active): ?>
+      <div class="notice notice-success is-dismissible">
+        <p>
+          <strong>✓ Smart Cache adapter active.</strong>
+          Using WPGraphQL Smart Cache for comprehensive event detection
+          (post meta, term relationships, comments, custom fields, and more).
+          Stellate handles caching at the edge.
+        </p>
+      </div>
+    <?php else: ?>
+      <div class="notice notice-info">
+        <p>
+          <strong>💡 Recommended: install WPGraphQL Smart Cache</strong>
+          for richer invalidation coverage — ACF / custom field changes,
+          taxonomy assignments, comment lifecycle, author archive refresh,
+          and smart filtering of autosaves and drafts.
+        </p>
+        <p>
+          Once installed and activated, Stellate detects it automatically and
+          switches to adapter mode. <strong>After activating</strong>, open
+          <a href="<?php echo esc_url($smart_cache_settings_url); ?>">WPGraphQL settings</a>
+          and turn off Smart Cache's <em>"Use Object Cache"</em> option —
+          Stellate's edge replaces that layer.
+        </p>
+        <?php if (current_user_can('install_plugins')): ?>
+          <p>
+            <a href="<?php echo esc_url($smart_cache_install_url); ?>" class="button button-primary">
+              Install Smart Cache
+            </a>
+          </p>
+        <?php else: ?>
+          <p>
+            <em>Ask a site administrator with plugin-install permissions to add WPGraphQL Smart Cache.</em>
+          </p>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
+
     <h3>Settings</h3>
     <form action="options.php" method="POST" autocomplete="off">
       <?php
@@ -262,6 +323,19 @@ add_action('registered_taxonomy', function (string $taxonomy, $object_type, arra
   });
 }, 10, 3);
 
+
+
+/**
+ * Register the legacy event listeners that translate WordPress events
+ * directly into Stellate purge mutations. Used as the default mode when
+ * the WPGraphQL Smart Cache plugin is NOT installed.
+ *
+ * When Smart Cache IS installed, the adapter mode (defined below) handles
+ * event translation instead, and these listeners are not registered.
+ */
+function stellate_register_legacy_hooks()
+{
+
 /**
  * This runs when inserting or updating any post type. This also includes
  * pages and menu items.
@@ -424,6 +498,180 @@ add_action('profile_update', function (int $user_id) {
 add_action('delete_user', function (int $user_id) {
   stellate_add_purge_entity('User', $user_id);
 });
+
+} // end of stellate_register_legacy_hooks
+
+
+
+/**
+ * Smart Cache adapter mode.
+ *
+ * When the WPGraphQL Smart Cache plugin is active, we delegate event detection
+ * to it. Smart Cache fires `do_action('graphql_purge', $key, $event, $hostname)`
+ * with one of four key shapes:
+ *
+ *   1. Relay global ID (base64 of "<type>:<id>", e.g. "cG9zdDoxMjM=" = "post:123")
+ *   2. "list:<lowercase_type>"     — when a list-shaped query goes stale
+ *   3. "skipped:<lowercase_type>"  — header-overflow fallback
+ *   4. "graphql:Query"             — purge everything
+ *
+ * Our translator decodes each key and queues an equivalent entry into
+ * $GLOBALS['gcdn_purges'], which the existing shutdown handler then sends to
+ * Stellate's admin API as a single batched mutation.
+ *
+ * Smart Cache provides what wp-stellate does not on its own: post meta tracking
+ * (ACF, custom fields), term relationship tracking, comprehensive filters
+ * (autosaves, private meta, draft-to-draft), comment lifecycle, menu visibility,
+ * and interface type expansion.
+ */
+
+function stellate_is_smart_cache_active()
+{
+  // Smart Cache defines this constant unconditionally at the top of its main
+  // plugin file, so it's available before any 'init' or 'plugins_loaded'
+  // hooks fire — more reliable than checking for an autoloaded class.
+  return defined('WPGRAPHQL_SMART_CACHE_VERSION');
+}
+
+/**
+ * Check whether Smart Cache's GraphQL object cache layer is enabled. When it
+ * is, the WordPress origin caches GraphQL responses that Stellate's edge is
+ * already caching — wasted memory with no speed benefit, since Stellate is
+ * still going to serve from the edge.
+ *
+ * Returns false safely if Smart Cache is missing or its API surface changed.
+ */
+function stellate_smart_cache_object_cache_enabled()
+{
+  if (!stellate_is_smart_cache_active()) return false;
+  if (!class_exists('\WPGraphQL\SmartCache\Admin\Settings')) return false;
+  if (!method_exists('\WPGraphQL\SmartCache\Admin\Settings', 'caching_enabled')) return false;
+  return (bool) \WPGraphQL\SmartCache\Admin\Settings::caching_enabled();
+}
+
+function stellate_register_adapter_hooks()
+{
+  add_action('graphql_purge', 'stellate_translate_graphql_purge_key', 10, 3);
+}
+
+function stellate_translate_graphql_purge_key($key, $event = '', $hostname = '')
+{
+  // Purge everything
+  if ($key === 'graphql:Query') {
+    $GLOBALS['gcdn_purges']['has_purged_all'] = true;
+    return;
+  }
+
+  // list:<type> — purge all responses of this type (catches empty-list staleness)
+  if (strpos($key, 'list:') === 0) {
+    $type = stellate_resolve_graphql_type(substr($key, 5));
+    if ($type !== null) {
+      stellate_ensure_purge_bucket($type);
+      stellate_add_purge_entity('purged_types', $type);
+    }
+    return;
+  }
+
+  // skipped:<type> — Smart Cache emits these as a safety net for CDN
+  // architectures with HTTP header size limits (X-GraphQL-Keys caps at
+  // 4000 bytes). When a response is tagged with too many node IDs to fit
+  // in the header, the truncated portion is represented by 'skipped:<type>'
+  // so the CDN can broadly invalidate that type.
+  //
+  // Stellate's edge does its own server-side tagging without header limits
+  // — the specific Relay IDs that fire alongside every 'skipped:<type>'
+  // are sufficient for precise invalidation. Translating 'skipped:*' here
+  // would only cause over-purging (e.g., one category change purging all
+  // Categories, Tags, PostFormats, etc.).
+  if (strpos($key, 'skipped:') === 0) {
+    return;
+  }
+
+  // Otherwise, treat as Relay global ID: base64("<type>:<id>")
+  $decoded = base64_decode($key, true);
+  if ($decoded === false || strpos($decoded, ':') === false) return;
+
+  list($type_prefix, $id) = explode(':', $decoded, 2);
+  if (!is_numeric($id)) return;
+
+  // 'term' is a generic Smart Cache prefix for any taxonomy term — resolve
+  // it to the actual taxonomy's GraphQL type via a term lookup.
+  if ($type_prefix === 'term') {
+    $term = get_term((int) $id);
+    if (!is_wp_error($term) && $term instanceof WP_Term) {
+      if (isset($GLOBALS['gcdn_typename_map'][$term->taxonomy])) {
+        $type = $GLOBALS['gcdn_typename_map'][$term->taxonomy];
+        stellate_ensure_purge_bucket($type);
+        stellate_add_purge_entity($type, (int) $id);
+      }
+    }
+    return;
+  }
+
+  $type = stellate_resolve_graphql_type($type_prefix);
+  if ($type === null) return;
+
+  stellate_ensure_purge_bucket($type);
+  stellate_add_purge_entity($type, (int) $id);
+}
+
+/**
+ * Resolve a lowercase type slug (from Smart Cache) to the GraphQL typename
+ * used as a bucket key in $GLOBALS['gcdn_purges'].
+ *
+ * Smart Cache uses lowercase slugs like "post", "page", "category". Our
+ * typename map gets populated with whatever WPGraphQL set as graphql_single_name
+ * — typically lowercase too. We also handle the capitalized hardcoded init
+ * buckets ('Post', 'Page', etc.) as a fallback.
+ */
+function stellate_resolve_graphql_type($lowercase_type)
+{
+  // Direct match (most common case)
+  if (array_key_exists($lowercase_type, $GLOBALS['gcdn_purges'])) {
+    return $lowercase_type;
+  }
+
+  // Case-insensitive scan of the typename map
+  foreach ($GLOBALS['gcdn_typename_map'] as $graphql_type) {
+    if (strtolower($graphql_type) === strtolower($lowercase_type)) {
+      return $graphql_type;
+    }
+  }
+
+  // Capitalized fallback (matches hardcoded init buckets)
+  $capitalized = ucfirst($lowercase_type);
+  if (array_key_exists($capitalized, $GLOBALS['gcdn_purges'])) {
+    return $capitalized;
+  }
+
+  return null;
+}
+
+/**
+ * Ensure a bucket exists for the type in $GLOBALS['gcdn_purges']. Smart Cache
+ * may emit purges for types whose registered_post_type / registered_taxonomy
+ * callback didn't run with show_in_graphql=true (e.g. cross-request flows).
+ */
+function stellate_ensure_purge_bucket($type)
+{
+  if (!isset($GLOBALS['gcdn_purges'][$type])) {
+    $GLOBALS['gcdn_purges'][$type] = [];
+  }
+}
+
+
+
+/**
+ * On plugins_loaded (priority 20, after Smart Cache loads), decide which mode
+ * we're in and register the appropriate hooks. Exactly one mode runs.
+ */
+add_action('plugins_loaded', function () {
+  if (stellate_is_smart_cache_active()) {
+    stellate_register_adapter_hooks();
+  } else {
+    stellate_register_legacy_hooks();
+  }
+}, 20);
 
 
 
