@@ -1,7 +1,7 @@
 === Stellate ===
 Tags: Stellate, GraphQL, WPGraphQL, API, Caching, Edge, Performance
 Requires at least: 5.0
-Tested up to: 6.4.0
+Tested up to: 7.1
 Requires PHP: 7.1
 Stable tag: 0.2.0
 License: GPL-3
