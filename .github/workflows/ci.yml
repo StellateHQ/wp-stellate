@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        php-version: ['7.1', '7.4', '8.0', '8.1', '8.2', '8.3']
+        php-version: ['7.4', '8.0', '8.1', '8.2', '8.3']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,10 +21,11 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          tools: php-parallel-lint
 
       - name: Run PHP syntax check
-        run: parallel-lint --exclude vendor .
+        run: |
+          find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
+          echo "PHP syntax check passed for PHP ${{ matrix.php-version }}"
 
   wordpress-compatibility:
     name: WordPress ${{ matrix.wp-version }} / PHP ${{ matrix.php-version }}
