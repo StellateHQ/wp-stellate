@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  php-syntax:
+    name: PHP ${{ matrix.php }} Syntax
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['7.4', '8.1', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+
+      - name: Check syntax
+        run: php -l wp-stellate.php
+
+  validate:
+    name: Validate Plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version consistency
+        run: |
+          README_VERSION=$(grep "^Stable tag:" readme.txt | cut -d' ' -f3)
+          PLUGIN_VERSION=$(grep "^ \* Version:" wp-stellate.php | cut -d' ' -f4)
+
+          echo "readme.txt version: $README_VERSION"
+          echo "wp-stellate.php version: $PLUGIN_VERSION"
+
+          if [ "$README_VERSION" != "$PLUGIN_VERSION" ]; then
+            echo "::error::Version mismatch between readme.txt and wp-stellate.php"
+            exit 1
+          fi
